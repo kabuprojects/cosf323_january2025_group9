@@ -2,16 +2,16 @@
 session_start();
 include 'db.php';
 
-// ✅ Check if admin is logged in
+//Check if admin is logged in
 if (!isset($_SESSION['admin_username'])) {
     header("Location: admin_login.php");
     exit();
 }
 
-// ✅ Fetch total users count
+// Fetch total users count
 $total_users = $conn->query("SELECT COUNT(*) AS count FROM users")->fetch_assoc()['count'];
 
-// ✅ Search users
+//Search users
 $search = "";
 if (isset($_GET['search'])) {
     $search = trim($_GET['search']);
@@ -22,11 +22,11 @@ if (isset($_GET['search'])) {
     $stmt->execute();
     $result = $stmt->get_result();
 } else {
-    // ✅ Fetch all users
+    //Fetch all users
     $result = $conn->query("SELECT * FROM users");
 }
 
-// ✅ Handle user deletion
+//Handle user deletion
 if (isset($_GET['delete'])) {
     $user_id = intval($_GET['delete']);
     $conn->query("DELETE FROM users WHERE id = $user_id");
@@ -34,7 +34,7 @@ if (isset($_GET['delete'])) {
     exit();
 }
 
-// ✅ Handle adding new user
+//Handle adding new user
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['add_user'])) {
     $new_username = trim($_POST['new_username']);
     $new_password = trim($_POST['new_password']);
@@ -47,7 +47,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['add_user'])) {
     exit();
 }
 
-// ✅ Handle password reset
+//Handle password reset
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['reset_password'])) {
     $user_id = intval($_POST['user_id']);
     $new_password = trim($_POST['new_password']);
@@ -152,7 +152,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['reset_password'])) {
 
 <div class="container">
 
-    <!-- ✅ Admin Profile -->
+    <!-- Admin Profile -->
     <h2>👋 Welcome, <?php echo $_SESSION['admin_username']; ?>!</h2>
 
     <h3>📊 Basic Statistics</h3>

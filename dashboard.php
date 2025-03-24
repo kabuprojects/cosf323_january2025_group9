@@ -1,7 +1,6 @@
 <?php
 session_start();
 require "db.php";
-
 date_default_timezone_set("Africa/Nairobi");
 
 // Check if user is logged in
@@ -9,16 +8,7 @@ if (!isset($_SESSION["user"])) {
     header("Location: login.php");
     exit();
 }
-
 $username = $_SESSION["user"];
-
-// Logout on refresh
-if (isset($_SESSION["last_page_load"])) {
-    session_destroy();
-    header("Location: login.php");
-    exit();
-}
-$_SESSION["last_page_load"] = time();
 
 // Auto logout after 5 minutes of inactivity
 $inactive_time = 300; // 5 minutes
@@ -29,235 +19,129 @@ if (isset($_SESSION["last_activity"]) && (time() - $_SESSION["last_activity"] > 
 }
 $_SESSION["last_activity"] = time();
 
-// Fetch allowed time settings from the database
-$query = "SELECT start_time, end_time FROM admin_settings WHERE id = 1"; // Assuming there is one row for settings
-$result = mysqli_query($conn, $query);
-$settings = mysqli_fetch_assoc($result);
+// Fetch allowed time and location settings from the database
+$stmt = $conn->prepare("SELECT start_time, end_time, min_latitude, max_latitude, min_longitude, max_longitude FROM admin_settings WHERE id = ?");
+$id = 1; // Default admin settings
+$stmt->bind_param("i", $id);
+$stmt->execute();
+$result = $stmt->get_result();
+$settings = $result->fetch_assoc();
+$stmt->close();
 
-// Default time if no settings are found
-$allowed_start_time = isset($settings['start_time']) ? $settings['start_time'] : 6; // Default to 6 AM
-$allowed_end_time = isset($settings['end_time']) ? $settings['end_time'] : 22; // Default to 10 PM
+// Default settings if no data is found
+$allowed_start_time = isset($settings['start_time']) ? (int)$settings['start_time'] : 6;
+$allowed_end_time = isset($settings['end_time']) ? (int)$settings['end_time'] : 22;
+$min_latitude = isset($settings['min_latitude']) ? $settings['min_latitude'] : -5.0;
+$max_latitude = isset($settings['max_latitude']) ? $settings['max_latitude'] : 5.0;
+$min_longitude = isset($settings['min_longitude']) ? $settings['min_longitude'] : 34.0;
+$max_longitude = isset($settings['max_longitude']) ? $settings['max_longitude'] : 42.0;
+
+// Get user's current location
+$current_latitude = -1.286389;
+$current_longitude = 36.817223;
+$is_within_location = ($current_latitude >= $min_latitude && $current_latitude <= $max_latitude) &&
+    ($current_longitude >= $min_longitude && $current_longitude <= $max_longitude);
+
+// Check if the current time is within the allowed time range
+$current_hour = (int)date("H");
+$is_within_time = $current_hour >= $allowed_start_time && $current_hour < $allowed_end_time;
 
 // Store last login time
 if (!isset($_SESSION["last_login"])) {
     $_SESSION["last_login"] = date("Y-m-d H:i:s");
 }
-
-// Cybersecurity tips
-$cyber_tips = [
-    "1️⃣ **Use Strong Passwords** - Always create unique and complex passwords for different accounts. Use a password manager if necessary.",
-    "2️⃣ **Enable Multi-Factor Authentication (MFA)** - Adding an extra layer of security helps prevent unauthorized access.",
-    "3️⃣ **Be Cautious of Phishing Attacks** - Avoid clicking on suspicious links or attachments in emails and messages.",
-    "4️⃣ **Keep Software and Systems Updated** - Regularly update your operating system, applications, and security patches.",
-    "5️⃣ **Secure Your Network and Devices** - Use a firewall, encrypt sensitive data, and avoid public Wi-Fi for critical transactions."
-];
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard</title>
-    <link rel="stylesheet" type="text/css" href="style.css">
-    <script>
-        function updateClock() {
-            let now = new Date();
-            document.getElementById("clock").innerHTML = now.toLocaleTimeString();
-            setTimeout(updateClock, 1000);
-        }
-
-        function getDeviceInfo() {
-            let userAgent = navigator.userAgent;
-            let deviceInfo = "Unknown Device";
-
-            if (/Windows/i.test(userAgent)) deviceInfo = "Windows PC";
-            else if (/Mac/i.test(userAgent)) deviceInfo = "MacBook or iMac";
-            else if (/Linux/i.test(userAgent)) deviceInfo = "Linux PC";
-            else if (/Android/i.test(userAgent)) deviceInfo = "Android Device";
-            else if (/iPhone|iPad/i.test(userAgent)) deviceInfo = "iOS Device";
-
-            document.getElementById("deviceInfo").innerHTML = "📱 Device: " + deviceInfo;
-        }
-
-        function toggleDarkMode() {
-            document.body.classList.toggle("dark-mode");
-        }
-
-        // Auto logout after 5 minutes of inactivity
-        let inactivityTime = 5 * 60 * 1000; // 5 minutes in milliseconds
-        let logoutTimer;
-
-        function resetTimer() {
-            clearTimeout(logoutTimer);
-            logoutTimer = setTimeout(() => {
-                window.location.href = 'logout.php';
-            }, inactivityTime);
-        }
-
-        function getLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(showPosition, showError);
-            } else {
-                document.getElementById("location").innerHTML = "Geolocation is not supported by this browser.";
-            }
-        }
-
-        function showPosition(position) {
-            let latitude = position.coords.latitude;
-            let longitude = position.coords.longitude;
-
-            // Display current latitude and longitude
-            document.getElementById("latitude").innerHTML = "Latitude: " + latitude;
-            document.getElementById("longitude").innerHTML = "Longitude: " + longitude;
-
-            // Check if within allowed location (Kenya's latitude/longitude)
-            if (latitude >= -5.0 && latitude <= 5.0 && longitude >= 34.0 && longitude <= 42.0) {
-                document.getElementById("place").innerHTML = "Your location is within Kenya.";
-            } else {
-                document.getElementById("place").innerHTML = "You are outside the allowed location (Kenya).";
-            }
-        }
-
-        function showError(error) {
-            switch(error.code) {
-                case error.PERMISSION_DENIED:
-                    document.getElementById("location").innerHTML = "User denied the request for Geolocation.";
-                    break;
-                case error.POSITION_UNAVAILABLE:
-                    document.getElementById("location").innerHTML = "Location information is unavailable.";
-                    break;
-                case error.TIMEOUT:
-                    document.getElementById("location").innerHTML = "The request to get user location timed out.";
-                    break;
-                case error.UNKNOWN_ERROR:
-                    document.getElementById("location").innerHTML = "An unknown error occurred.";
-                    break;
-            }
-        }
-
-        window.onload = function () {
-            updateClock();
-            getDeviceInfo();
-            resetTimer();
-            document.body.addEventListener("mousemove", resetTimer);
-            document.body.addEventListener("keydown", resetTimer);
-            getLocation();
-        };
-    </script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            background-color: green;
-            color: #333;
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Arial, sans-serif; background-color: #f8f9fa; display: flex; flex-direction: column; min-height: 100vh; }
+        .sidebar {
+            width: 250px;
+            background: #f4f4f4;
             padding: 20px;
+            border-right: 1px solid #ccc;
+            height: 100vh;
+            position: fixed;
+            transition: all 0.3s ease;
+            overflow-y: auto;
+            left: 0;
         }
-        .dark-mode {
-            background-color: #222;
-            color: #fff;
-        }
-        .container {
-            max-width: 600px;
-            margin: auto;
-            background: #fff;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
-        }
-        .profile {
-            width: 80px;
-            height: 80px;
-            background-color: #ccc;
-            border-radius: 50%;
-            display: inline-block;
-            margin-bottom: 10px;
-        }
-        .profile img {
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-        }
-        .cyber-tips {
-            text-align: left;
-            padding: 10px;
-            background: #f0f0f0;
-            border-radius: 8px;
-            margin-top: 10px;
-        }
-        button {
-            padding: 10px 15px;
+        .sidebar.closed { width: 0; padding: 0; overflow: hidden; }
+        .sidebar a { display: block; padding: 10px; border-radius: 5px; text-decoration: none; color: #333; transition: background 0.3s ease; }
+        .sidebar a:hover { background-color: #007bff; color: white; }
+        .sidebar a.logout { color: red; font-weight: bold; }
+        .toggle-btn {
             background: #007bff;
             color: #fff;
-            border: none;
+            padding: 10px;
+            text-align: center;
             cursor: pointer;
-            margin-top: 10px;
-        }
-        button:hover {
-            background: #0056b3;
-        }
-        .admin-login {
-            margin-top: 30px;
-            padding: 15px;
-            background: #ffeded;
-            border-radius: 8px;
-            border: 1px solid #ff6b6b;
-        }
-        .admin-login h3 {
-            color: #d9534f;
-        }
-        .admin-login input {
-            width: 80%;
-            padding: 8px;
-            margin: 5px;
-            border: 1px solid #ccc;
             border-radius: 5px;
+            transition: background 0.3s ease;
+            position: fixed;
+            left: 260px;
+            top: 10px;
         }
-        
-
-
+        .toggle-btn:hover { background: #0056b3; }
+        .content { margin-left: 250px; padding: 40px; transition: margin-left 0.3s ease; }
+        .content.full-width { margin-left: 0; }
+        .dashboard-card {
+            background: white;
+            padding: 90px;
+            border-radius: 10px;
+            box-shadow: 0 5px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 500px;
+            width: 50%;
+        }
+        h2, h3, p { margin-bottom: 15px; }
+        .footer { background: #333; color: #fff; text-align: center; padding: 10px; margin-top: auto; }
+        .footer a { color: #007bff; text-decoration: none; margin: 0 10px; }
+        .footer a:hover { text-decoration: underline; }
     </style>
+    <script>
+        function toggleSidebar() {
+            var sidebar = document.querySelector(".sidebar");
+            var content = document.querySelector(".content");
+            sidebar.classList.toggle("closed");
+            content.classList.toggle("full-width");
+        }
+        function updateTime() {
+            document.getElementById("current-time").innerText = new Date().toLocaleTimeString();
+        }
+        setInterval(updateTime, 1000);
+    </script>
 </head>
 <body>
-    
-
-    <div class="container">
-        <div class="profile">
-            <img src="profile-icon.png">
-        </div>
-
-        <h2>🎉 Welcome, <?php echo htmlspecialchars($username); ?>!</h2>
-        <p>📅 Last login: <?php echo $_SESSION["last_login"]; ?></p>
-
-        <div id="clock">🕒 Loading time...</div>
-        <div id="deviceInfo">📱 Detecting device...</div>
-
-        <h3>⏳ Allowed Time: <?php echo "$allowed_start_time:00 - $allowed_end_time:00"; ?></h3>
-        <h3>🌍 Allowed Location: Kenya</h3>
-
-        <h3>🌍 Current Location:</h3>
-        <div id="location"></div>
-        <div id="latitude"></div>
-        <div id="longitude"></div>
-        <div id="place"></div>
-
-        <h3>🔒 Cybersecurity Tips:</h3>
-        <div class="cyber-tips">
-            <ul>
-                <?php foreach ($cyber_tips as $tip) {
-                    echo "<li>$tip</li>";
-                } ?>
-            </ul>
-        </div>
-
-        <button onclick="toggleDarkMode()">🌙 Toggle Dark Mode</button>
-        <br>
-        <a href="logout.php"><button>🚪 Logout</button></a>
-
-    </div>
-    <div class="footer">
-        <p>&copy; <?php echo date("Y"); ?> Secure Dashboard. Contact: support@user.com</p>
+    <div class="toggle-btn" onclick="toggleSidebar()">☰</div>
+    <div class="sidebar">
+        <a href="dashboard.php">Personal Profile</a>
+        <a href="tips.php">Cybersecurity Tips</a>
+        <a href="help.php">Help</a>
+        <a href="logout.php" class="logout">🚪 Logout</a>
     </div>
 
+    <div class="content">
+        <div class="dashboard-card">
+            <h2>🎉 Welcome, <?php echo htmlspecialchars($username); ?>!</h2>
+            <p>📅 Last login: <?php echo $_SESSION["last_login"]; ?></p>
+            <p>🕒 Current Time: <span id="current-time"><?php echo date("H:i:s"); ?></span></p>
+            <p>📍 Current location: Latitude <?php echo $current_latitude; ?>, Longitude <?php echo $current_longitude; ?></p>
+            <h3>⏳ <h3>⏳ Allowed Time: <?php echo date("h:i A", strtotime("$allowed_start_time:00")) . " - " . date("h:i A", strtotime("$allowed_end_time:00")); ?></h3>
+</h3>
+            <h3>📌 Allowed Location: Latitude <?php echo "$min_latitude to $max_latitude"; ?>, Longitude <?php echo "$min_longitude to $max_longitude"; ?></h3>
+            <p><?php echo $is_within_time ? "✅ You are within the allowed time range." : "❌ You are outside the allowed time range."; ?></p>
+            <p><?php echo $is_within_location ? "✅ You are within the allowed location range." : "❌ You are outside the allowed location range."; ?></p>
+        </div>
+        <footer class="footer">
+        <p>🌐 <a href="#">Facebook</a> | <a href="#">Twitter</a> | <a href="#">LinkedIn</a></p>
+        <p>&copy; <?php echo date("Y"); ?> AUTSYSTEMS LTD. All rights reserved.</p>
+    </footer>
+    </div>
 </body>
 </html>

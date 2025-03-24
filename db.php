@@ -12,7 +12,7 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
-// Use UTF-8 character encoding
+// Use character encoding
 $conn->set_charset("utf8");
 
 ?>

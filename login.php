@@ -4,37 +4,37 @@ require "db.php";
 
 date_default_timezone_set("Africa/Nairobi");
 
-$allowed_start_time = 6;
-$allowed_end_time = 22;
-
-// Allowed location (Kenya coordinates)
-$allowed_latitude = [-4.6, 4.6];
-$allowed_longitude = [33.5, 41.5];
+// Fetch admin settings from the database
+$stmt = $conn->prepare("SELECT start_time, end_time, min_latitude, max_latitude, min_longitude, max_longitude FROM admin_settings WHERE id = 1");
+$stmt->execute();
+$stmt->bind_result($allowed_start_time, $allowed_end_time, $min_latitude, $max_latitude, $min_longitude, $max_longitude);
+$stmt->fetch();
+$stmt->close();
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $username = $_POST["username"];
     $password = $_POST["password"];
     $latitude = $_POST["latitude"];
     $longitude = $_POST["longitude"];
-    
-    // Fetch user details from database
+
+    // Fetch user details from the database
     $stmt = $conn->prepare("SELECT id, password_hash, security_question, security_answer_hash FROM users WHERE username = ?");
     $stmt->bind_param("s", $username);
     $stmt->execute();
     $stmt->store_result();
-    
+
     if ($stmt->num_rows > 0) {
         $stmt->bind_result($id, $password_hash, $security_question, $security_answer_hash);
         $stmt->fetch();
 
         if (password_verify($password, $password_hash)) {
-            $current_hour = date("G");
+            $current_hour = (int) date("H");
 
             // Check if login is within allowed time and location
             if (
                 ($current_hour >= $allowed_start_time && $current_hour <= $allowed_end_time) &&
-                ($latitude >= $allowed_latitude[0] && $latitude <= $allowed_latitude[1]) &&
-                ($longitude >= $allowed_longitude[0] && $longitude <= $allowed_longitude[1])
+                ($latitude >= $min_latitude && $latitude <= $max_latitude) &&
+                ($longitude >= $min_longitude && $longitude <= $max_longitude)
             ) {
                 $_SESSION["user"] = $username;
                 header("Location: dashboard.php");
@@ -54,8 +54,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     $stmt->close();
 }
-?>
 
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -65,15 +65,29 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <link rel="stylesheet" type="text/css" href="style.css">
     <style>
         body {
-    font-family: Arial, sans-serif;
-    background-color: green;
-    color:#333;
-    margin: 0;
-    padding: 0;
-    text-align: center;
-}
-</style>
+            font-family: Arial, sans-serif;
+            background-color: green;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            text-align: center;
+        }
 
+        .spinner {
+            display: none;
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(0, 0, 0, 0.2);
+            border-top-color: #333;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -89,6 +103,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             <input type="hidden" name="latitude" id="latitude">
             <input type="hidden" name="longitude" id="longitude">
 
+            <div class="spinner" id="spinner"></div>
             <button type="submit">Login</button>
         </form>
         <p>New user? <a href="register.php">Register here</a></p>
@@ -98,19 +113,25 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <!-- JavaScript to Fetch Geolocation -->
     <script>
     function getLocation() {
+        const spinner = document.getElementById("spinner");
+        spinner.style.display = "block"; // Show spinner
+
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 function(position) {
                     document.getElementById("latitude").value = position.coords.latitude;
                     document.getElementById("longitude").value = position.coords.longitude;
+                    spinner.style.display = "none"; // Hide spinner before submitting
                     document.forms[0].submit();
                 },
                 function(error) {
+                    spinner.style.display = "none"; // Hide spinner on error
                     alert("⚠️ Location access denied. Please enable GPS to continue.");
                 }
             );
             return false; // Prevent default form submission
         } else {
+            spinner.style.display = "none"; // Hide spinner if geolocation unsupported
             alert("⚠️ Geolocation is not supported by this browser.");
             return false;
         }
